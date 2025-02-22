@@ -27,9 +27,9 @@ enum LlamaStatus { uninitialized, ready, generating, error, disposed }
 /// Provides text generation capabilities using the llama model.
 class Llama {
   static llama_cpp? _lib;
-  late Pointer<llama_model> model;
-  late Pointer<llama_vocab> vocab;
-  late Pointer<llama_context> context;
+  Pointer<llama_model> model = nullptr;
+  Pointer<llama_vocab> vocab = nullptr;
+  Pointer<llama_context> context = nullptr;
   late llama_batch batch;
 
   Pointer<llama_sampler> _smpl = nullptr;
@@ -55,8 +55,14 @@ class Llama {
     if (_lib == null) {
       if (libraryPath != null) {
         _lib = llama_cpp(DynamicLibrary.open(libraryPath!));
+      } else if (Platform.isAndroid) {
+        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
+      } else if (Platform.isLinux) {
+        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
+      } else if (Platform.isWindows) {
+        _lib = llama_cpp(DynamicLibrary.open("llama.dll"));
       } else {
-        _lib = llama_cpp(DynamicLibrary.process());
+        throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
       }
     }
     return _lib!;
@@ -103,7 +109,9 @@ class Llama {
     final modelPathPtr = modelPath.toNativeUtf8().cast<Char>();
     try {
       model = lib.llama_load_model_from_file(modelPathPtr, modelParams);
-      if (model.address == 0) {
+      if (model == nullptr) {
+        throw LlamaException("Could not load model at $modelPath");
+      } else if (model.address == 0) {
         throw LlamaException("Could not load model at $modelPath");
       }
     } finally {
@@ -116,8 +124,10 @@ class Llama {
     var contextParams = contextParamsDart.get();
 
     context = lib.llama_new_context_with_model(model, contextParams);
-    if (context.address == 0) {
-      throw Exception("Could not load context!");
+    if (context == nullptr) {
+      throw LlamaException("Could not load context!");
+    } else if (context.address == 0) {
+      throw LlamaException("Could not load context!");
     }
 
     samplerParams ??= SamplerParams();
@@ -239,6 +249,74 @@ class Llama {
     _tokenPtr = malloc<llama_token>();
   }
 
+  void clearChat() {
+    clear();
+    formatted = '';
+    messages.clear();
+    prevLen = 0;
+  }
+
+  List<(String, String)> messages = [];
+  String formatted = '';
+  int prevLen = 0;
+
+  String chat(String prompt) {
+    Pointer<Char> tmpl = lib.llama_model_chat_template(model, nullptr);
+    messages.add(('user', prompt));
+
+    final arrayPointer = calloc<llama_chat_message>(messages.length);
+    for (var i = 0; i < messages.length; i++) {
+      arrayPointer[i].role = messages[i].$1.toNativeUtf8().cast<Char>();
+      arrayPointer[i].content = messages[i].$2.toNativeUtf8().cast<Char>();
+    }
+
+    int newLen = lib.llama_chat_apply_template(
+        tmpl,
+        arrayPointer,
+        messages.length,
+        true,
+        formatted.toNativeUtf8().cast<Char>(),
+        formatted.length);
+    Pointer<Char> formattedPtr = calloc<Char>(newLen);
+
+    newLen = lib.llama_chat_apply_template(
+        tmpl, arrayPointer, messages.length, true, formattedPtr, newLen);
+
+    if (newLen < 0 || formattedPtr == nullptr) {
+      throw ('Failed to apply chat template');
+    }
+    formatted = formattedPtr.cast<Utf8>().toDartString(length: newLen);
+    String formattedPrompt = formatted.substring(prevLen, newLen);
+    setPrompt(formattedPrompt);
+    String response = '';
+    while (true) {
+      var (token, done) = getNext();
+      response += token;
+      if (done) {
+        break;
+      }
+    }
+
+    messages.add(('assistant', response));
+
+    final newArrayPointer = calloc<llama_chat_message>(messages.length);
+    for (var i = 0; i < messages.length; i++) {
+      newArrayPointer[i].role = messages[i].$1.toNativeUtf8().cast<Char>();
+      newArrayPointer[i].content = messages[i].$2.toNativeUtf8().cast<Char>();
+    }
+
+    prevLen = lib.llama_chat_apply_template(
+        tmpl, newArrayPointer, messages.length, false, nullptr, 0);
+    if (prevLen < 0) {
+      throw ('Failed to apply chat template');
+    }
+
+    calloc.free(newArrayPointer);
+    calloc.free(arrayPointer);
+    calloc.free(formattedPtr);
+    return response;
+  }
+
   /// Sets the prompt for text generation.
   ///
   /// [prompt] - The input prompt text
@@ -324,7 +402,7 @@ class Llama {
         _tokenPtr.value = newTokenId;
         batch = lib.llama_batch_get_one(_tokenPtr, 1);
 
-        bool isEos = newTokenId == lib.llama_token_eos(vocab);
+        bool isEos = lib.llama_token_is_eog(vocab, newTokenId);
         return (piece, isEos);
       } finally {
         malloc.free(buf);
