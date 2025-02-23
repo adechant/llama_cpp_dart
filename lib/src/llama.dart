@@ -91,6 +91,16 @@ class Llama {
     }
   }
 
+  /// Fetches the chat template from the model
+  String fetchChatTemplate() {
+    Pointer<Char> tmpl = lib.llama_model_chat_template(model, nullptr);
+    if (tmpl == nullptr) {
+      return '';
+    }
+    String template = tmpl.cast<Utf8>().toDartString();
+    return template;
+  }
+
   /// Validates the configuration parameters
   void _validateConfiguration() {
     if (_nPredict <= 0) {
@@ -260,7 +270,7 @@ class Llama {
   String formatted = '';
   int prevLen = 0;
 
-  String chat(String prompt) {
+  Stream<String> chat(String prompt) async* {
     Pointer<Char> tmpl = lib.llama_model_chat_template(model, nullptr);
     messages.add(('user', prompt));
 
@@ -292,6 +302,7 @@ class Llama {
     while (true) {
       var (token, done) = getNext();
       response += token;
+      yield token;
       if (done) {
         break;
       }
@@ -314,7 +325,6 @@ class Llama {
     calloc.free(newArrayPointer);
     calloc.free(arrayPointer);
     calloc.free(formattedPtr);
-    return response;
   }
 
   /// Sets the prompt for text generation.

@@ -11,23 +11,8 @@ class LlamaInit extends LlamaCommand {
   final ModelParams modelParams;
   final ContextParams contextParams;
   final SamplerParams samplingParams;
-  final PromptFormat format;
   LlamaInit(this.libraryPath, this.modelParams, this.contextParams,
-      this.samplingParams, this.format);
-}
-
-class LlamaPrompt extends LlamaCommand {
-  final String prompt;
-  LlamaPrompt(this.prompt);
-}
-
-class LlamaResponse {
-  final String text;
-  final bool isDone;
-  LlamaResponse({
-    required this.text,
-    required this.isDone,
-  });
+      this.samplingParams);
 }
 
 class LlamaLoad extends LlamaCommand {
@@ -35,12 +20,29 @@ class LlamaLoad extends LlamaCommand {
   final ModelParams modelParams;
   final ContextParams contextParams;
   final SamplerParams samplingParams;
-  final PromptFormat format;
   LlamaLoad({
     required this.path,
     required this.modelParams,
     required this.contextParams,
     required this.samplingParams,
-    required this.format,
   });
 }
+
+sealed class LlamaResponse extends LlamaCommand {}
+
+class LlamaChatMessage extends LlamaResponse {
+  final String role;
+  final String content;
+  final bool addAssistant;
+
+  LlamaChatMessage(this.role, this.content, [this.addAssistant = true]);
+}
+
+class LlamaChatError extends LlamaResponse {
+  final String error;
+  LlamaChatError({
+    required this.error,
+  });
+}
+
+class LlamaChatDone extends LlamaResponse {}
