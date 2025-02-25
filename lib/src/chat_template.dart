@@ -175,9 +175,9 @@ LlmChatTemplate llmChatDetectTemplate(String tmpl) {
     return LlmChatTemplate.minicpm;
   } else if (tmplContains("'Assistant: ' + message['content'] + eos_token")) {
     return LlmChatTemplate.deepseek2;
-  } else if (tmplContains(r"<｜Assistant｜>") &&
-      tmplContains(r"<｜User｜>") &&
-      tmplContains(r"<｜end of sentence｜>")) {
+  } else if (tmplContains("<｜Assistant｜>") &&
+      tmplContains("<｜User｜>") &&
+      tmplContains("<｜end▁of▁sentence｜>")) {
     return LlmChatTemplate.deepseek3;
   } else if (tmplContains("[|system|]") &&
       tmplContains("[|assistant|]") &&
@@ -511,7 +511,7 @@ String llmChatsApplyTemplate(
         ss.write("User: ${message.content}\n\n");
       } else if (role == "assistant") {
         // Assuming LU8("<｜end of sentence｜>") is just a UTF-8 encoded string literal
-        ss.write("Assistant: ${message.content}<｜end of sentence｜>");
+        ss.write("Assistant: ${message.content}<｜end▁of▁sentence｜>");
       }
     }
     if (addAss) {
@@ -528,7 +528,7 @@ String llmChatsApplyTemplate(
         ss.write("<｜User｜>${message.content}");
       } else if (role == "assistant") {
         // Assuming LU8("<｜Assistant｜>") and LU8("<｜end of sentence｜>") are UTF-8 string literals
-        ss.write("<｜Assistant｜>${message.content}<｜end of sentence｜>");
+        ss.write("<｜Assistant｜>${message.content}<｜end▁of▁sentence｜>");
       }
     }
     if (addAss) {

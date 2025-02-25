@@ -7,17 +7,15 @@ import "isolate_types.dart";
 class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
   LlamaChild() : super(id: 1);
 
-  bool shouldStop = false;
   Llama? llama;
   LlmChatTemplate _template = LlmChatTemplate.chatml;
-  final List<LlamaChatMessage> _messages = [];
 
   @override
   void onData(LlamaCommand data) {
     try {
       switch (data) {
         case LlamaStop() || LlamaClear():
-          shouldStop = true;
+          llama?.stop();
           llama?.clear();
           break;
         case LlamaLoad(
@@ -30,8 +28,7 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
           _template = llmChatDetectTemplate(llama?.fetchChatTemplate() ?? '');
           break;
         case LlamaChatMessage():
-          _messages.add(data);
-          _sendPrompt(data);
+          _prompt(data);
           break;
         case LlamaInit(:final libraryPath):
           Llama.libraryPath = libraryPath;
@@ -44,26 +41,21 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
     }
   }
 
-  void _sendPrompt(LlamaChatMessage data) {
+  void _prompt(LlamaChatMessage data) {
     String formattedPrompt =
         llmChatApplyTemplate(_template, data, data.addAssistant);
     if (formattedPrompt.isEmpty) {
       return;
     }
-    _messages.add(data);
-    llama?.setPrompt(formattedPrompt);
-    while (true) {
-      if (shouldStop) break;
-      final (text, isDone) = llama!.getNext();
+
+    Stream<String>? response = llama?.generate(formattedPrompt);
+    response?.listen((text) {
       final response = LlamaChatMessage('assistant', text);
-      _messages.add(response);
-      sendToParent(response);
-      if (isDone) {
-        shouldStop = true;
-        sendToParent(LlamaChatDone());
-      }
-    }
-    //reset shouldStop for next time...
-    shouldStop = false;
+      sendToParent(response); // Send response to parent
+    }, onDone: () {
+      sendToParent(LlamaChatDone());
+    }, onError: (e) {
+      sendToParent(LlamaChatError(error: 'Error generating text $e'));
+    });
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'sampler_params.dart';
@@ -35,13 +36,15 @@ class Llama {
   Pointer<llama_sampler> _smpl = nullptr;
   Pointer<llama_token> _tokens = nullptr;
   Pointer<llama_token> _tokenPtr = nullptr;
+  final int _bufSize = 512;
+  Pointer<Char> _buffer = nullptr;
   int _nPrompt = 0;
   int _nPredict = 32;
-  int _nPos = 0;
 
   // bool _isInitialized = false;
   bool _isDisposed = false;
   LlamaStatus _status = LlamaStatus.uninitialized;
+  bool _shouldStop = false;
 
   static String? libraryPath = Platform.isAndroid ? "libllama.so" : null;
 
@@ -79,7 +82,7 @@ class Llama {
       _validateConfiguration();
       _initializeLlama(
           modelPath, modelParamsDart, contextParamsDart, samplerParams);
-      // _isInitialized = true;
+      _buffer = malloc<Char>(_bufSize);
       _status = LlamaStatus.ready;
 
       // ggml_log_callback logCallback = nullptr;
@@ -261,81 +264,11 @@ class Llama {
 
   void clearChat() {
     clear();
-    formatted = '';
-    messages.clear();
-    prevLen = 0;
   }
 
-  List<(String, String)> messages = [];
-  String formatted = '';
-  int prevLen = 0;
-
-  Stream<String> chat(String prompt) async* {
-    Pointer<Char> tmpl = lib.llama_model_chat_template(model, nullptr);
-    messages.add(('user', prompt));
-
-    final arrayPointer = calloc<llama_chat_message>(messages.length);
-    for (var i = 0; i < messages.length; i++) {
-      arrayPointer[i].role = messages[i].$1.toNativeUtf8().cast<Char>();
-      arrayPointer[i].content = messages[i].$2.toNativeUtf8().cast<Char>();
-    }
-
-    int newLen = lib.llama_chat_apply_template(
-        tmpl,
-        arrayPointer,
-        messages.length,
-        true,
-        formatted.toNativeUtf8().cast<Char>(),
-        formatted.length);
-    Pointer<Char> formattedPtr = calloc<Char>(newLen);
-
-    newLen = lib.llama_chat_apply_template(
-        tmpl, arrayPointer, messages.length, true, formattedPtr, newLen);
-
-    if (newLen < 0 || formattedPtr == nullptr) {
-      throw ('Failed to apply chat template');
-    }
-    formatted = formattedPtr.cast<Utf8>().toDartString(length: newLen);
-    String formattedPrompt = formatted.substring(prevLen, newLen);
-    setPrompt(formattedPrompt);
-    String response = '';
-    while (true) {
-      var (token, done) = getNext();
-      response += token;
-      yield token;
-      if (done) {
-        break;
-      }
-    }
-
-    messages.add(('assistant', response));
-
-    final newArrayPointer = calloc<llama_chat_message>(messages.length);
-    for (var i = 0; i < messages.length; i++) {
-      newArrayPointer[i].role = messages[i].$1.toNativeUtf8().cast<Char>();
-      newArrayPointer[i].content = messages[i].$2.toNativeUtf8().cast<Char>();
-    }
-
-    prevLen = lib.llama_chat_apply_template(
-        tmpl, newArrayPointer, messages.length, false, nullptr, 0);
-    if (prevLen < 0) {
-      throw ('Failed to apply chat template');
-    }
-
-    calloc.free(newArrayPointer);
-    calloc.free(arrayPointer);
-    calloc.free(formattedPtr);
-  }
-
-  /// Sets the prompt for text generation.
-  ///
-  /// [prompt] - The input prompt text
-  /// [onProgress] - Optional callback for tracking tokenization progress
-  ///
-  /// Throws [ArgumentError] if prompt is empty
-  /// Throws [LlamaException] if tokenization fails
-  void setPrompt(String prompt,
-      {void Function(int current, int total)? onProgress}) {
+  Stream<String> generate(String prompt,
+      {void Function(int current, int total)? onProgress}) async* {
+    _shouldStop = false;
     if (prompt.isEmpty) {
       throw ArgumentError('Prompt cannot be empty');
     }
@@ -351,93 +284,85 @@ class Llama {
         malloc.free(_tokens);
       }
 
+      // Check if KV cache is empty - if it is, this is the first generation
+      final bool isFirst = lib.llama_get_kv_cache_used_cells(context) == 0;
+
+      // First get the required number of tokens
+      final nativeUtf8 = prompt.toNativeUtf8();
       final promptPtr = prompt.toNativeUtf8().cast<Char>();
       try {
         _nPrompt = -lib.llama_tokenize(
-            vocab, promptPtr, prompt.length, nullptr, 0, true, true);
+            vocab, promptPtr, nativeUtf8.length, nullptr, 0, isFirst, true);
 
         _tokens = malloc<llama_token>(_nPrompt);
-        if (lib.llama_tokenize(vocab, promptPtr, prompt.length, _tokens,
-                _nPrompt, true, true) <
+        if (lib.llama_tokenize(vocab, promptPtr, nativeUtf8.length, _tokens,
+                _nPrompt, isFirst, true) <
             0) {
           throw LlamaException("Failed to tokenize prompt");
         }
-
-        batch = lib.llama_batch_get_one(_tokens, _nPrompt);
-        _nPos = 0;
       } finally {
         malloc.free(promptPtr);
-      }
-    } catch (e) {
-      _status = LlamaStatus.error;
-      throw LlamaException('Error setting prompt', e);
-    }
-  }
-
-  /// Generates the next token in the sequence.
-  ///
-  /// Returns a tuple containing the generated text and a boolean indicating if generation is complete.
-  /// Throws [LlamaException] if generation fails.
-  (String, bool) getNext() {
-    if (_isDisposed) {
-      throw StateError('Cannot generate text on disposed instance');
-    }
-
-    try {
-      if (_nPos + batch.n_tokens >= _nPrompt + _nPredict) {
-        return ("", true);
+        malloc.free(nativeUtf8);
       }
 
-      if (lib.llama_decode(context, batch) != 0) {
-        throw LlamaException("Failed to eval");
-      }
+      /* detokenize should reconvert the prompt - uncomment to sanity check */
 
-      _nPos += batch.n_tokens;
+      int ntoks = lib.llama_detokenize(
+          vocab, _tokens, _nPrompt, _buffer, _bufSize, true, true);
+      print(
+          'Sanity check! Prompt: ${_buffer.cast<Utf8>().toDartString(length: ntoks)}');
 
-      int newTokenId = lib.llama_sampler_sample(_smpl, context, -1);
+      batch = lib.llama_batch_get_one(_tokens, _nPrompt);
 
-      if (lib.llama_token_is_eog(vocab, newTokenId)) {
-        return ("", true);
-      }
-
-      final buf = malloc<Char>(128);
-      try {
-        int n = lib.llama_token_to_piece(vocab, newTokenId, buf, 128, 0, true);
-        if (n < 0) {
-          throw LlamaException("Failed to convert token to piece");
+      while (!_shouldStop) {
+        // check if we have enough space in the context to evaluate this batch
+        int nCtx = lib.llama_n_ctx(context);
+        int nCtxUsed = lib.llama_get_kv_cache_used_cells(context);
+        if (nCtxUsed + batch.n_tokens > nCtx) {
+          throw LlamaException("Context size exceeded.");
         }
 
-        String piece = String.fromCharCodes(buf.cast<Uint8>().asTypedList(n));
+        if (lib.llama_decode(context, batch) != 0) {
+          throw LlamaException("Failed to decode.");
+        }
 
+        // sample the next token
+        int newTokenId = lib.llama_sampler_sample(_smpl, context, -1);
+
+        // is it an end of generation?
+        if (lib.llama_vocab_is_eog(vocab, newTokenId)) {
+          break;
+        }
+
+        int pieceLength = lib.llama_token_to_piece(
+            vocab, newTokenId, _buffer, _bufSize, 0, false);
+        if (pieceLength < 0) {
+          throw LlamaException("Failed to convert token to text");
+        }
+
+        try {
+          String piece = _buffer.cast<Utf8>().toDartString(length: pieceLength);
+          yield piece;
+        } catch (e) {
+          print(
+              '$e. end_of_sentence likely: ${String.fromCharCodes(_buffer.cast<Uint8>().asTypedList(pieceLength))}');
+        }
         _tokenPtr.value = newTokenId;
-        batch = lib.llama_batch_get_one(_tokenPtr, 1);
 
-        bool isEos = lib.llama_token_is_eog(vocab, newTokenId);
-        return (piece, isEos);
-      } finally {
-        malloc.free(buf);
+        batch = lib.llama_batch_get_one(_tokenPtr, 1);
       }
     } catch (e) {
       _status = LlamaStatus.error;
-      throw LlamaException('Error generating text', e);
+      throw LlamaException('Error generating text: $e');
+    } finally {
+      _shouldStop = false;
     }
+    _status = LlamaStatus.ready;
   }
 
-  /// Provides a stream of generated text tokens
-  Stream<String> generateText() async* {
-    if (_isDisposed) {
-      throw StateError('Cannot generate text on disposed instance');
-    }
-
-    try {
-      while (true) {
-        final (text, isDone) = getNext();
-        if (isDone) break;
-        yield text;
-      }
-    } catch (e) {
-      _status = LlamaStatus.error;
-      throw LlamaException('Error in text generation stream', e);
+  void stop() {
+    if (_status == LlamaStatus.generating) {
+      _shouldStop = true;
     }
   }
 
@@ -450,6 +375,7 @@ class Llama {
     if (_smpl != nullptr) lib.llama_sampler_free(_smpl);
     if (context.address != 0) lib.llama_free(context);
     if (model.address != 0) lib.llama_free_model(model);
+    if (_buffer != nullptr) malloc.free(_buffer);
 
     lib.llama_backend_free();
 
@@ -474,7 +400,6 @@ class Llama {
 
       // Reset internal state
       _nPrompt = 0;
-      _nPos = 0;
 
       // Reset the context state
       if (context.address != 0) {
