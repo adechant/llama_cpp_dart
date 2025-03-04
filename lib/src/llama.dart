@@ -1,7 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'sampler_params.dart';
@@ -268,6 +267,7 @@ class Llama {
 
   Stream<String> generate(String prompt,
       {void Function(int current, int total)? onProgress}) async* {
+    String fullResponse = '';
     _shouldStop = false;
     if (prompt.isEmpty) {
       throw ArgumentError('Prompt cannot be empty');
@@ -342,6 +342,7 @@ class Llama {
 
         try {
           String piece = _buffer.cast<Utf8>().toDartString(length: pieceLength);
+          fullResponse += piece;
           yield piece;
         } catch (e) {
           print(
@@ -356,6 +357,7 @@ class Llama {
       throw LlamaException('Error generating text: $e');
     } finally {
       _shouldStop = false;
+      clear();
     }
     _status = LlamaStatus.ready;
   }

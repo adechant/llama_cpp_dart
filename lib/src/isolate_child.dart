@@ -14,8 +14,7 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
   void onData(LlamaCommand data) {
     try {
       switch (data) {
-        case LlamaStop() || LlamaClear():
-          llama?.stop();
+        case LlamaClear():
           llama?.clear();
           break;
         case LlamaLoad(

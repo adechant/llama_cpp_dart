@@ -17,6 +17,7 @@ class LlamaParent {
   StreamController<String>? _controller;
   StreamController<String>? _thinkController;
   LlamaGenerationState _state = LlamaGenerationState.ready;
+  LlamaGenerationState get state => _state;
 
   void _onData(LlamaResponse data) async {
     switch (data) {
@@ -102,7 +103,7 @@ class LlamaParent {
     return (_controller!.stream, _thinkController!.stream);
   }
 
-  void stop() => _parent.sendToChild(id: 1, data: LlamaStop());
+  void stop() {}
 
   Future<void> dispose() async {
     await _subscription?.cancel();
