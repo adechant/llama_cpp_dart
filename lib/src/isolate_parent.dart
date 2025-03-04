@@ -4,7 +4,7 @@ import 'dart:isolate';
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'package:typed_isolate/typed_isolate.dart';
 
-enum LlamaGenerationState { ready, thinking, generating }
+enum LlamaGenerationState { ready, thinking, generating, error }
 
 class LlamaParent {
   final _parent = IsolateParent<LlamaCommand, LlamaResponse>();
@@ -18,6 +18,7 @@ class LlamaParent {
   StreamController<String>? _thinkController;
   LlamaGenerationState _state = LlamaGenerationState.ready;
   LlamaGenerationState get state => _state;
+  StreamController<LlamaGenerationState>? _stateController;
 
   void _onData(LlamaResponse data) async {
     switch (data) {
@@ -26,6 +27,7 @@ class LlamaParent {
         break;
       case LlamaChatError(:final error):
         _controller?.addError(error);
+        _stateController?.add(LlamaGenerationState.ready);
         break;
       case LlamaChatDone():
         await _controller?.close();
@@ -33,6 +35,7 @@ class LlamaParent {
         _controller = null;
         _thinkController = null;
         _state = LlamaGenerationState.ready;
+        _stateController?.add(LlamaGenerationState.ready);
         break;
     }
   }
@@ -51,6 +54,7 @@ class LlamaParent {
       final String afterThinking =
           response.content.substring(response.content.indexOf('<think>'));
       _state = LlamaGenerationState.thinking;
+      _stateController?.add(_state);
       if (beforeThinking.isNotEmpty) {
         _controller?.add(beforeThinking);
       }
@@ -63,6 +67,7 @@ class LlamaParent {
       final String afterThinkingEnd = response.content
           .substring(response.content.indexOf('</think>') + '</think>'.length);
       _state = LlamaGenerationState.generating;
+      _stateController?.add(_state);
       if (afterThinkingEnd.isNotEmpty) {
         _controller?.add(afterThinkingEnd);
       }
@@ -76,7 +81,7 @@ class LlamaParent {
     }
   }
 
-  Future<void> init() async {
+  Future<Stream<LlamaGenerationState>> init() async {
     _parent.init();
     _subscription = _parent.stream.listen(_onData);
     _child?.kill();
@@ -86,6 +91,9 @@ class LlamaParent {
             loadCommand.contextParams, loadCommand.samplingParams),
         id: 1);
     _parent.sendToChild(data: loadCommand, id: 1);
+    _stateController = StreamController<LlamaGenerationState>.broadcast();
+    _stateController?.add(_state);
+    return _stateController!.stream;
   }
 
   void sendSystemPrompt(String prompt) {
@@ -113,5 +121,6 @@ class LlamaParent {
     _child?.kill();
     _parent.dispose();
     _child = null;
+    _stateController?.close();
   }
 }
