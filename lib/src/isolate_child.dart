@@ -5,7 +5,7 @@ import "llama.dart";
 import "isolate_types.dart";
 
 class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
-  LlamaChild() : super(id: 1);
+  LlamaChild(int id) : super(id: id);
 
   Llama? llama;
   LlmChatTemplate _template = LlmChatTemplate.chatml;

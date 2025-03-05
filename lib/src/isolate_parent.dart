@@ -4,11 +4,23 @@ import 'dart:isolate';
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 import 'package:typed_isolate/typed_isolate.dart';
 
-enum LlamaGenerationState { ready, thinking, generating, error }
+enum LlamaGenerationState {
+  ready('Ready'),
+  thinking('Thinking'),
+  generating('Generating'),
+  error('Error');
+
+  const LlamaGenerationState(this.name);
+  final String name;
+
+  @override
+  String toString() => name;
+}
 
 class LlamaParent {
   final _parent = IsolateParent<LlamaCommand, LlamaResponse>();
   Isolate? _child;
+  LlamaChild? _llamaChild;
   bool get isInitialized => _child != null;
   StreamSubscription<LlamaResponse>? _subscription;
   List<LlamaChatMessage> messages = [];
@@ -19,6 +31,8 @@ class LlamaParent {
   LlamaGenerationState _state = LlamaGenerationState.ready;
   LlamaGenerationState get state => _state;
   StreamController<LlamaGenerationState>? _stateController;
+  int _generationCount = 0;
+  int get generationCount => _generationCount;
 
   void _onData(LlamaResponse data) async {
     switch (data) {
@@ -42,7 +56,7 @@ class LlamaParent {
 
   void clear() {
     messages.clear();
-    _parent.sendToChild(id: 1, data: LlamaClear());
+    _parent.sendToChild(id: _generationCount, data: LlamaClear());
   }
 
   void _parseResponse(LlamaChatMessage response) {
@@ -84,41 +98,50 @@ class LlamaParent {
   Future<Stream<LlamaGenerationState>> init() async {
     _parent.init();
     _subscription = _parent.stream.listen(_onData);
-    _child?.kill();
-    _child = await _parent.spawn(LlamaChild());
-    _parent.sendToChild(
-        data: LlamaInit(Llama.libraryPath, loadCommand.modelParams,
-            loadCommand.contextParams, loadCommand.samplingParams),
-        id: 1);
-    _parent.sendToChild(data: loadCommand, id: 1);
     _stateController = StreamController<LlamaGenerationState>.broadcast();
-    _stateController?.add(_state);
+    _initChild();
     return _stateController!.stream;
   }
 
   void sendSystemPrompt(String prompt) {
     LlamaChatMessage msg = LlamaChatMessage('system', prompt);
     messages.add(msg);
-    _parent.sendToChild(id: 1, data: msg);
+    _parent.sendToChild(id: _generationCount, data: msg);
   }
 
   (Stream<String>, Stream<String>) sendUserPrompt(String prompt) {
     LlamaChatMessage msg = LlamaChatMessage('user', prompt);
     messages.add(msg);
-    _parent.sendToChild(id: 1, data: msg);
+    _parent.sendToChild(id: _generationCount, data: msg);
     _controller = StreamController<String>.broadcast();
     _thinkController = StreamController<String>.broadcast();
     return (_controller!.stream, _thinkController!.stream);
   }
 
-  void stop() {}
+  void _initChild() async {
+    _child?.kill(priority: Isolate.immediate);
+    _generationCount++;
+    _llamaChild = LlamaChild(_generationCount);
+    _child = await _parent.spawn(_llamaChild!);
+    _parent.sendToChild(
+        data: LlamaInit(Llama.libraryPath, loadCommand.modelParams,
+            loadCommand.contextParams, loadCommand.samplingParams),
+        id: _generationCount);
+    _parent.sendToChild(data: loadCommand, id: _generationCount);
+    _state = LlamaGenerationState.ready;
+    _stateController?.add(_state);
+  }
+
+  void stop() async {
+    _initChild();
+  }
 
   Future<void> dispose() async {
     await _subscription?.cancel();
     await _controller?.close();
     await _thinkController?.close();
-    _parent.sendToChild(id: 1, data: LlamaClear());
-    _child?.kill();
+    _parent.sendToChild(id: _generationCount, data: LlamaClear());
+    _child?.kill(priority: Isolate.immediate);
     _parent.dispose();
     _child = null;
     _stateController?.close();
