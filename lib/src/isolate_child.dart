@@ -9,6 +9,7 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
 
   Llama? llama;
   LlmChatTemplate _template = LlmChatTemplate.chatml;
+  String _systemPrompt = '';
 
   @override
   void onData(LlamaCommand data) {
@@ -45,6 +46,13 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
         llmChatApplyTemplate(_template, data, data.addAssistant);
     if (formattedPrompt.isEmpty) {
       return;
+    }
+
+    if (data.role == 'system') {
+      _systemPrompt = formattedPrompt;
+      return;
+    } else if (data.role == 'user') {
+      formattedPrompt = '$_systemPrompt$formattedPrompt';
     }
 
     Stream<String>? response = llama?.generate(formattedPrompt);

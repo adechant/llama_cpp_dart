@@ -306,11 +306,18 @@ class Llama {
       }
 
       /* detokenize should reconvert the prompt - uncomment to sanity check */
-
-      int ntoks = lib.llama_detokenize(
-          vocab, _tokens, _nPrompt, _buffer, _bufSize, true, true);
-      print(
-          'Sanity check! Prompt: ${_buffer.cast<Utf8>().toDartString(length: ntoks)}');
+      final int tmpSize = _nPrompt + 10;
+      Pointer<Char> tmpBuffer = malloc<Char>(tmpSize);
+      try {
+        int ntoks = lib.llama_detokenize(
+            vocab, _tokens, _nPrompt, tmpBuffer, tmpSize, true, true);
+        print(
+            'Sanity check! Prompt: ${tmpBuffer.cast<Utf8>().toDartString(length: ntoks)}');
+      } catch (e) {
+        print('Sanity check failed: $e');
+      } finally {
+        malloc.free(tmpBuffer);
+      }
 
       batch = lib.llama_batch_get_one(_tokens, _nPrompt);
 

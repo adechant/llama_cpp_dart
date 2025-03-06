@@ -41,7 +41,7 @@ class LlamaParent {
         break;
       case LlamaChatError(:final error):
         _controller?.addError(error);
-        _stateController?.add(LlamaGenerationState.ready);
+        _stateController?.add(LlamaGenerationState.error);
         break;
       case LlamaChatDone():
         await _controller?.close();
@@ -67,8 +67,7 @@ class LlamaParent {
           response.content.substring(0, response.content.indexOf('<think>'));
       final String afterThinking =
           response.content.substring(response.content.indexOf('<think>'));
-      _state = LlamaGenerationState.thinking;
-      _stateController?.add(_state);
+      updateState(LlamaGenerationState.thinking);
       if (beforeThinking.isNotEmpty) {
         _controller?.add(beforeThinking);
       }
@@ -80,8 +79,7 @@ class LlamaParent {
           0, response.content.indexOf('</think>') + '</think>'.length);
       final String afterThinkingEnd = response.content
           .substring(response.content.indexOf('</think>') + '</think>'.length);
-      _state = LlamaGenerationState.generating;
-      _stateController?.add(_state);
+      updateState(LlamaGenerationState.generating);
       if (afterThinkingEnd.isNotEmpty) {
         _controller?.add(afterThinkingEnd);
       }
@@ -89,10 +87,18 @@ class LlamaParent {
         _thinkController?.add(beforeThinkingEnd);
       }
     } else if (_state == LlamaGenerationState.thinking) {
+      updateState(LlamaGenerationState.thinking);
       _thinkController?.add(response.content);
     } else {
+      updateState(LlamaGenerationState.generating);
       _controller?.add(response.content);
     }
+  }
+
+  void updateState(LlamaGenerationState state) {
+    if (_state == state) return;
+    _state = state;
+    _stateController?.add(_state);
   }
 
   Future<Stream<LlamaGenerationState>> init() async {
@@ -115,6 +121,9 @@ class LlamaParent {
     _parent.sendToChild(id: _generationCount, data: msg);
     _controller = StreamController<String>.broadcast();
     _thinkController = StreamController<String>.broadcast();
+
+    _state = LlamaGenerationState.generating;
+    _stateController?.add(_state);
     return (_controller!.stream, _thinkController!.stream);
   }
 
