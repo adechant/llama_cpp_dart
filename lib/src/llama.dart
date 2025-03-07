@@ -43,7 +43,6 @@ class Llama {
   // bool _isInitialized = false;
   bool _isDisposed = false;
   LlamaStatus _status = LlamaStatus.uninitialized;
-  bool _shouldStop = false;
 
   static String? libraryPath = Platform.isAndroid ? "libllama.so" : null;
 
@@ -266,9 +265,9 @@ class Llama {
   }
 
   Stream<String> generate(String prompt,
-      {void Function(int current, int total)? onProgress}) async* {
+      {void Function(int current, int total)? onProgress,
+      Future<bool> Function()? checkInterrupt}) async* {
     String fullResponse = '';
-    _shouldStop = false;
     if (prompt.isEmpty) {
       throw ArgumentError('Prompt cannot be empty');
     }
@@ -321,7 +320,11 @@ class Llama {
 
       batch = lib.llama_batch_get_one(_tokens, _nPrompt);
 
-      while (!_shouldStop) {
+      while (true) {
+        if ((await checkInterrupt?.call()) ?? false) {
+          break;
+        }
+
         // check if we have enough space in the context to evaluate this batch
         int nCtx = lib.llama_n_ctx(context);
         int nCtxUsed = lib.llama_get_kv_cache_used_cells(context);
@@ -363,16 +366,10 @@ class Llama {
       _status = LlamaStatus.error;
       throw LlamaException('Error generating text: $e');
     } finally {
-      _shouldStop = false;
+      //TODO do we want to clear each time?
       clear();
     }
     _status = LlamaStatus.ready;
-  }
-
-  void stop() {
-    if (_status == LlamaStatus.generating) {
-      _shouldStop = true;
-    }
   }
 
   /// Disposes of all resources held by this instance

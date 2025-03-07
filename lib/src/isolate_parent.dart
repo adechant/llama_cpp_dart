@@ -41,15 +41,14 @@ class LlamaParent {
         break;
       case LlamaChatError(:final error):
         _controller?.addError(error);
-        _stateController?.add(LlamaGenerationState.error);
+        updateState(LlamaGenerationState.error);
         break;
       case LlamaChatDone():
         await _controller?.close();
         await _thinkController?.close();
         _controller = null;
         _thinkController = null;
-        _state = LlamaGenerationState.ready;
-        _stateController?.add(LlamaGenerationState.ready);
+        updateState(LlamaGenerationState.ready);
         break;
     }
   }
@@ -128,7 +127,10 @@ class LlamaParent {
   }
 
   void _initChild() async {
-    _child?.kill(priority: Isolate.immediate);
+    if (_child != null) {
+      _parent.sendToChild(id: _generationCount, data: LlamaDispose());
+    }
+    _child?.kill();
     _generationCount++;
     _llamaChild = LlamaChild(_generationCount);
     _child = await _parent.spawn(_llamaChild!);
@@ -141,16 +143,16 @@ class LlamaParent {
     _stateController?.add(_state);
   }
 
-  void stop() async {
-    _initChild();
+  void interrupt() async {
+    _parent.sendToChild(data: LLamaInterrupt(), id: _generationCount);
   }
 
   Future<void> dispose() async {
     await _subscription?.cancel();
     await _controller?.close();
     await _thinkController?.close();
-    _parent.sendToChild(id: _generationCount, data: LlamaClear());
-    _child?.kill(priority: Isolate.immediate);
+    _parent.sendToChild(id: _generationCount, data: LlamaDispose());
+    _child?.kill();
     _parent.dispose();
     _child = null;
     _stateController?.close();

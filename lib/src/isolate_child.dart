@@ -10,6 +10,7 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
   Llama? llama;
   LlmChatTemplate _template = LlmChatTemplate.chatml;
   String _systemPrompt = '';
+  bool _interrupt = false;
 
   @override
   void onData(LlamaCommand data) {
@@ -33,6 +34,13 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
         case LlamaInit(:final libraryPath):
           Llama.libraryPath = libraryPath;
           break;
+        case LlamaDispose():
+          llama?.dispose();
+          llama = null;
+          break;
+        case LLamaInterrupt():
+          print('interrupting');
+          _interrupt = true;
         default:
           break;
       }
@@ -58,6 +66,7 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
     Stream<String>? response = llama?.generate(formattedPrompt);
     response?.listen((text) {
       final response = LlamaChatMessage('assistant', text);
+
       sendToParent(response); // Send response to parent
     }, onDone: () {
       sendToParent(LlamaChatDone());

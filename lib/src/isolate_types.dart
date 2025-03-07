@@ -4,6 +4,10 @@ sealed class LlamaCommand {}
 
 class LlamaClear extends LlamaCommand {}
 
+class LLamaInterrupt extends LlamaCommand {}
+
+class LlamaDispose extends LlamaCommand {}
+
 class LlamaInit extends LlamaCommand {
   final String? libraryPath;
   final ModelParams modelParams;
