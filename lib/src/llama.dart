@@ -407,6 +407,8 @@ class Llama {
         lib.llama_kv_cache_clear(context);
       }
 
+      lib.llama_sampler_reset(_smpl);
+
       // Reset batch
       batch = lib.llama_batch_init(0, 0, 1);
 
