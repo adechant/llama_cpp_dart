@@ -260,14 +260,9 @@ class Llama {
     _tokenPtr = malloc<llama_token>();
   }
 
-  void clearChat() {
-    clear();
-  }
-
   Stream<String> generate(String prompt,
       {void Function(int current, int total)? onProgress,
       Future<bool> Function()? checkInterrupt}) async* {
-    String fullResponse = '';
     if (prompt.isEmpty) {
       throw ArgumentError('Prompt cannot be empty');
     }
@@ -305,7 +300,8 @@ class Llama {
       }
 
       /* detokenize should reconvert the prompt - uncomment to sanity check */
-      final int tmpSize = _nPrompt + 10;
+      /* uncomment to debug UTF-8 character encoding issues */
+      /*final int tmpSize = _nPrompt + 10;
       Pointer<Char> tmpBuffer = malloc<Char>(tmpSize);
       try {
         int ntoks = lib.llama_detokenize(
@@ -316,7 +312,7 @@ class Llama {
         print('Sanity check failed: $e');
       } finally {
         malloc.free(tmpBuffer);
-      }
+      }*/
 
       batch = lib.llama_batch_get_one(_tokens, _nPrompt);
 
@@ -352,7 +348,6 @@ class Llama {
 
         try {
           String piece = _buffer.cast<Utf8>().toDartString(length: pieceLength);
-          fullResponse += piece;
           yield piece;
         } catch (e) {
           print(
