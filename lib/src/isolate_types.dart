@@ -8,6 +8,8 @@ class LLamaInterrupt extends LlamaCommand {}
 
 class LlamaDispose extends LlamaCommand {}
 
+class LlamaKill extends LlamaCommand {}
+
 class LlamaInit extends LlamaCommand {
   final String? libraryPath;
   final ModelParams modelParams;
