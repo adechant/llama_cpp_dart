@@ -253,8 +253,8 @@ if(NOT DEFINED DEPLOYMENT_TARGET)
     # Unless specified, SDK version 4.0 is used by default as minimum target version (watchOS).
     set(DEPLOYMENT_TARGET "4.0")
   elseif(PLATFORM STREQUAL "MAC")
-    # Unless specified, SDK version 10.13 (High sierra) is used by default as minimum target version (macos).
-    set(DEPLOYMENT_TARGET "10.13")
+    # Unless specified, SDK version 10.15 (High sierra) is used by default as minimum target version (macos).
+    set(DEPLOYMENT_TARGET "10.15")
   elseif(PLATFORM STREQUAL "MAC_ARM64")
     # Unless specified, SDK version 11.0 (Big Sur) is used by default as minimum target version (macos on arm).
     set(DEPLOYMENT_TARGET "11.0")
