@@ -6,18 +6,39 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    String modelPath =
+        '/Users/adechant/projects/wellspoken/assets/models/gemma-3-1b-it-Q8_0.gguf';
+    if (Platform.isMacOS) {
+    } else if (Platform.isWindows) {
+      modelPath = 'H:/wellspoken/assets/models/gemma-3-4b-it-Q5_K_M.gguf';
+    } else if (Platform.isLinux) {
+      print('Running on Linux');
+    } else {
+      print('Unknown platform');
+    }
 
-    String modelPath = '/Users/adechant/projects/wellspoken/assets/models/gemma-3-1b-it-Q8_0.gguf';
     File model = File(modelPath);
-    if(model.existsSync()){
+    if (model.existsSync()) {
       print('Found model');
     } else {
-      print ('Model not found. Exiting...');
+      print('Model not found. Exiting...');
       exit(1);
     }
 
-    Llama(modelPath);
+    /*File dll = File('llama.dll');
+    if (dll.existsSync()) {
+      print('Found dll');
+    } else {
+      print('DLL not found. Exiting...');
+      exit(1);
+    }*/
 
+    final Llama llama = Llama(modelPath);
+    final Stream<String> output =
+        llama.generate('What is the capital of France?');
+    await for (String line in output) {
+      print(line);
+    }
   } catch (e) {
     print(e);
   }
