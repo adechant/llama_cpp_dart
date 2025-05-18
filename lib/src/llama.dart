@@ -62,6 +62,8 @@ class Llama {
         _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
       } else if (Platform.isWindows) {
         _lib = llama_cpp(DynamicLibrary.open("llama.dll"));
+      } else if (Platform.isMacOS){
+        _lib = llama_cpp(DynamicLibrary.open("libllama.dylib"));
       } else {
         throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
       }
@@ -119,7 +121,7 @@ class Llama {
 
     final modelPathPtr = modelPath.toNativeUtf8().cast<Char>();
     try {
-      model = lib.llama_load_model_from_file(modelPathPtr, modelParams);
+      model = lib.llama_model_load_from_file(modelPathPtr, modelParams);
       if (model == nullptr) {
         throw LlamaException("Could not load model at $modelPath");
       } else if (model.address == 0) {

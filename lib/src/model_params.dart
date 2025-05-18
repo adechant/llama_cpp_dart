@@ -50,6 +50,7 @@ class ModelParams {
 
   /// Constructs and returns a `llama_model_params` object with current settings
   llama_model_params get() {
+    return Llama.lib.llama_model_default_params();
     final modelParams = Llama.lib.llama_model_default_params();
 
     // Basic parameters
