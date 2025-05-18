@@ -131,7 +131,6 @@ class ContextParams {
     contextParams.yarn_beta_slow = yarnBetaSlow;
     contextParams.yarn_orig_ctx = yarnOrigCtx;
     contextParams.defrag_thold = defragThold;
-    contextParams.logits_all = logitsAll;
     contextParams.embeddings = embeddings;
     contextParams.offload_kqv = offloadKqv;
     contextParams.flash_attn = flashAttn;
