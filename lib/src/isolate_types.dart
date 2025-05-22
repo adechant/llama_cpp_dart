@@ -50,3 +50,5 @@ class LlamaChatError extends LlamaResponse {
 }
 
 class LlamaChatDone extends LlamaResponse {}
+
+class LlamaReady extends LlamaResponse{}

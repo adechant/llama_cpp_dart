@@ -50,6 +50,9 @@ class LlamaParent {
         _thinkController = null;
         updateState(LlamaGenerationState.ready);
         break;
+      case LlamaReady():
+        updateState(LlamaGenerationState.ready);
+        break;
     }
   }
 
