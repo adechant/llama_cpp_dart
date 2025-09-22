@@ -133,7 +133,6 @@ class ContextParams {
     contextParams.defrag_thold = defragThold;
     contextParams.embeddings = embeddings;
     contextParams.offload_kqv = offloadKqv;
-    contextParams.flash_attn = flashAttn;
     contextParams.no_perf = noPerfTimings;
 
     return contextParams;

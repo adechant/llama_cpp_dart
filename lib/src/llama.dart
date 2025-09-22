@@ -39,6 +39,7 @@ class Llama {
   Pointer<Char> _buffer = nullptr;
   int _nPrompt = 0;
   int _nPredict = 32;
+  int _nPast = 0;
 
   // bool _isInitialized = false;
   bool _isDisposed = false;
@@ -136,19 +137,61 @@ class Llama {
     _nPredict = contextParamsDart.nPredit;
     var contextParams = contextParamsDart.get();
 
-    context = lib.llama_new_context_with_model(model, contextParams);
+    context = lib.llama_init_from_model(model, contextParams);
     if (context == nullptr) {
       throw LlamaException("Could not load context!");
     } else if (context.address == 0) {
       throw LlamaException("Could not load context!");
     }
 
+    if (lib.llama_pooling_type$1(context) == llama_pooling_type.LLAMA_POOLING_TYPE_RANK) {
+        bool ok = true;
+
+        if (lib.llama_vocab_bos(vocab) == LLAMA_TOKEN_NULL) {
+            print("_initializeLlama: warning: vocab does not have a  BOS token, reranking will not work\n");
+            ok = false;
+        }
+
+        final bool hasEos = lib.llama_vocab_eos(vocab) != LLAMA_TOKEN_NULL;
+        final bool hasSep = lib.llama_vocab_sep(vocab) != LLAMA_TOKEN_NULL;
+
+        if (!hasEos && !hasSep) 
+        {
+            print("_initializeLlama: warning: vocab does not have an EOS token or SEP token, reranking will not work\n");
+            ok = false;
+        } else if (!hasEos) 
+        {
+            print("_initializeLlama: warning: vocab does not have an EOS token, using SEP token as fallback\n");
+        } else if (!hasSep) 
+        {
+            print("_initializeLlama: warning: vocab does not have a SEP token, reranking will not work\n");
+            ok = false;
+        }
+
+        if (!ok) 
+        {
+            lib.llama_free(context);
+            lib.llama_model_free(model);
+            throw LlamaException("Could not load context!");
+        }
+    }
+
+    // Set up the sampler
     samplerParams ??= SamplerParams();
 
-    // Initialize sampler chain
+    if (samplerParams.penaltyLastTokens == -1) {
+        print("%s: setting penalty_last_n to ctx_size = ${lib.llama_n_ctx(context)}\n", );
+        samplerParams.penaltyLastTokens = lib.llama_n_ctx(context);
+    }
+
+    if (samplerParams.dryLookback == -1) {
+        print("%s: setting dryLookBack to ctx_size = ${lib.llama_n_ctx(context)}\n", );
+        samplerParams.dryLookback = lib.llama_n_ctx(context);
+    }
+
     llama_sampler_chain_params sparams =
         lib.llama_sampler_chain_default_params();
-    sparams.no_perf = false;
+
     _smpl = lib.llama_sampler_chain_init(sparams);
 
     // Add samplers based on params
@@ -158,10 +201,6 @@ class Llama {
 
     lib.llama_sampler_chain_add(
         _smpl, lib.llama_sampler_init_dist(samplerParams.seed));
-
-    if (samplerParams.softmax) {
-      lib.llama_sampler_chain_add(_smpl, lib.llama_sampler_init_softmax());
-    }
 
     lib.llama_sampler_chain_add(
         _smpl, lib.llama_sampler_init_top_k(samplerParams.topK));
@@ -209,19 +248,6 @@ class Llama {
     calloc.free(grammarStrPtr);
     calloc.free(grammarRootPtr);
 
-    /*lib.llama_sampler_chain_add(
-        _smpl,
-        lib.llama_sampler_init_penalties(
-            lib.llama_n_vocab(vocab),
-            lib.llama_token_eos(vocab).toDouble(),
-            lib.llama_token_nl(vocab).toDouble(),
-            samplerParams.penaltyLastTokens.toDouble(),
-            samplerParams.penaltyRepeat,
-            samplerParams.penaltyFreq,
-            samplerParams.penaltyPresent,
-            samplerParams.penaltyNewline,
-            samplerParams.ignoreEOS));*/
-
     lib.llama_sampler_chain_add(
         _smpl,
         lib.llama_sampler_init_penalties(
@@ -257,8 +283,6 @@ class Llama {
       calloc.free(seqBreakersPointer);
     }
 
-    // lib.llama_sampler_chain_add(_smpl, lib.llama_sampler_init_infill(model));
-
     _tokenPtr = malloc<llama_token>();
   }
 
@@ -280,12 +304,10 @@ class Llama {
         malloc.free(_tokens);
       }
 
-      // Check if KV cache is empty - if it is, this is the first generation
-      final bool isFirst = lib.llama_get_kv_cache_used_cells(context) == 0;
-
       // First get the required number of tokens
       final nativeUtf8 = prompt.toNativeUtf8();
       final promptPtr = prompt.toNativeUtf8().cast<Char>();
+      final bool isFirst = _nPast == 0;
       try {
         _nPrompt = -lib.llama_tokenize(
             vocab, promptPtr, nativeUtf8.length, nullptr, 0, isFirst, true);
@@ -325,8 +347,7 @@ class Llama {
 
         // check if we have enough space in the context to evaluate this batch
         int nCtx = lib.llama_n_ctx(context);
-        int nCtxUsed = lib.llama_get_kv_cache_used_cells(context);
-        if (nCtxUsed + batch.n_tokens > nCtx) {
+        if (_nPast + batch.n_tokens > nCtx) {
           throw LlamaException("Context size exceeded.");
         }
 
@@ -403,13 +424,13 @@ class Llama {
 
       // Reset internal state
       _nPrompt = 0;
-
-      // Reset the context state
-      if (context.address != 0) {
-        lib.llama_kv_cache_clear(context);
-      }
+      _nPast = 0;
 
       lib.llama_sampler_reset(_smpl);
+      final kv = lib.llama_get_memory(context);
+      lib.llama_memory_clear(kv, true);
+      //final int num_cached = lib.llama_memory_get_num_cached(kv);
+      //llama_cpp.llama_memory_seq_rm(kv, -1, num_cached, -1)
 
       // Reset batch
       batch = lib.llama_batch_init(0, 0, 1);
@@ -516,8 +537,6 @@ class Llama {
       promptBatch.n_tokens = nTokens;
 
       // 4. Decode the batch (run the model)
-      lib.llama_kv_cache_clear(
-          context); // Clear KV cache before decoding.  IMPORTANT!
 
       if (lib.llama_decode(context, promptBatch) != 0) {
         lib.llama_batch_free(promptBatch);
