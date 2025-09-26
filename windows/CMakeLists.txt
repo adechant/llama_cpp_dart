@@ -4,16 +4,16 @@
 # customers of the plugin.
 cmake_minimum_required(VERSION 3.14)
 
-# Project-level configuration.
-set(PROJECT_NAME "llama_cpp_dart")
-project(${PROJECT_NAME} LANGUAGES CXX)
+# Invoke the build for native code shared with the other target platforms.
+# This can be changed to accommodate different builds.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DIR}/lib")
 
 set(llama_cpp_dart_bundled_libraries
-    "${CMAKE_CURRENT_SOURCE_DIR}/ggml-base.dll"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ggml-cpu.dll"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ggml-cuda.dll"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ggml.dll"
-    "${CMAKE_CURRENT_SOURCE_DIR}/llama.dll"
-    "${CMAKE_CURRENT_SOURCE_DIR}/mtmd.dll"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-base.dll" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cpu.dll"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml-cuda.dll"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/ggml.dll"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/llama.dll"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/llama.cpp/build/bin/Release/mtmd.dll"
     PARENT_SCOPE
 )

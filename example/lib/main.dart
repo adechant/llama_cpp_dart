@@ -10,7 +10,7 @@ void main() async {
         '/Users/adechant/projects/wellspoken/assets/models/gemma-3-1b-it-Q8_0.gguf';
     if (Platform.isMacOS) {
     } else if (Platform.isWindows) {
-      modelPath = 'C:/Users/antho/Documents/Jonathan/gemma-3-12b-it-Q8_0.gguf';
+      modelPath = 'C:/Users/antho/Documents/Jonathan/gemma-3-12b-it-Q4_0.gguf';
     } else if (Platform.isLinux) {
       print('Running on Linux');
     } else {
