@@ -14,8 +14,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/llama_cpp_dart/macos
 
 SPEC CHECKSUMS:
-  FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
-  llama_cpp_dart: b64d06543999db19ad846d8301572b2fd41e4628
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  llama_cpp_dart: 52113dc5a39678c4f8f08d61417c73f2a7c446b4
 
 PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
 
