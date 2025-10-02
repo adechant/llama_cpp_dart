@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
       {
       :name => 'Precompile Build Llama.cpp',
       :execution_position => :before_compile,
-      :script => 'echo "Building Llama.cpp"; cd ${PODS_TARGET_SRCROOT}/../src/llama.cpp; cmake -B build -DGGML_METAL=ON; cmake --build build --config Release -j 8; echo "cp ${PODS_TARGET_SRCROOT}/../src/llama.cpp/build/bin/*.dylib ${PODS_TARGET_SRCROOT}/"; cp ${PODS_TARGET_SRCROOT}/../src/llama.cpp/build/bin/*.dylib ${PODS_TARGET_SRCROOT}/; echo "Building Llama.cpp Complete"'
+      :script => 'echo "Building Llama.cpp"; cd ${PODS_TARGET_SRCROOT}/../src/llama.cpp; cmake -B build -DGGML_METAL=ON; cmake --build build --config Release -j 8; cp ./build/bin/*.dylib ../../macos/; echo "Building Llama.cpp Complete"'
       }
     s.vendored_libraries = '*.dylib'
   end
