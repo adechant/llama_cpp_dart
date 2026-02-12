@@ -62,8 +62,8 @@ class Llama {
       } else if (Platform.isLinux) {
         _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
       } else if (Platform.isWindows) {
-        _lib = llama_cpp(DynamicLibrary.open("llama.dll"));
-      } else if (Platform.isMacOS){
+        _lib = llama_cpp(DynamicLibrary.open("./llama.dll"));
+      } else if (Platform.isMacOS) {
         _lib = llama_cpp(DynamicLibrary.open("libllama.dylib"));
       } else {
         throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
@@ -144,49 +144,54 @@ class Llama {
       throw LlamaException("Could not load context!");
     }
 
-    if (lib.llama_pooling_type$1(context) == llama_pooling_type.LLAMA_POOLING_TYPE_RANK) {
-        bool ok = true;
+    if (lib.llama_pooling_type$1(context) ==
+        llama_pooling_type.LLAMA_POOLING_TYPE_RANK) {
+      bool ok = true;
 
-        if (lib.llama_vocab_bos(vocab) == LLAMA_TOKEN_NULL) {
-            print("_initializeLlama: warning: vocab does not have a  BOS token, reranking will not work\n");
-            ok = false;
-        }
+      if (lib.llama_vocab_bos(vocab) == LLAMA_TOKEN_NULL) {
+        print(
+            "_initializeLlama: warning: vocab does not have a  BOS token, reranking will not work\n");
+        ok = false;
+      }
 
-        final bool hasEos = lib.llama_vocab_eos(vocab) != LLAMA_TOKEN_NULL;
-        final bool hasSep = lib.llama_vocab_sep(vocab) != LLAMA_TOKEN_NULL;
+      final bool hasEos = lib.llama_vocab_eos(vocab) != LLAMA_TOKEN_NULL;
+      final bool hasSep = lib.llama_vocab_sep(vocab) != LLAMA_TOKEN_NULL;
 
-        if (!hasEos && !hasSep) 
-        {
-            print("_initializeLlama: warning: vocab does not have an EOS token or SEP token, reranking will not work\n");
-            ok = false;
-        } else if (!hasEos) 
-        {
-            print("_initializeLlama: warning: vocab does not have an EOS token, using SEP token as fallback\n");
-        } else if (!hasSep) 
-        {
-            print("_initializeLlama: warning: vocab does not have a SEP token, reranking will not work\n");
-            ok = false;
-        }
+      if (!hasEos && !hasSep) {
+        print(
+            "_initializeLlama: warning: vocab does not have an EOS token or SEP token, reranking will not work\n");
+        ok = false;
+      } else if (!hasEos) {
+        print(
+            "_initializeLlama: warning: vocab does not have an EOS token, using SEP token as fallback\n");
+      } else if (!hasSep) {
+        print(
+            "_initializeLlama: warning: vocab does not have a SEP token, reranking will not work\n");
+        ok = false;
+      }
 
-        if (!ok) 
-        {
-            lib.llama_free(context);
-            lib.llama_model_free(model);
-            throw LlamaException("Could not load context!");
-        }
+      if (!ok) {
+        lib.llama_free(context);
+        lib.llama_model_free(model);
+        throw LlamaException("Could not load context!");
+      }
     }
 
     // Set up the sampler
     samplerParams ??= SamplerParams();
 
     if (samplerParams.penaltyLastTokens == -1) {
-        print("%s: setting penalty_last_n to ctx_size = ${lib.llama_n_ctx(context)}\n", );
-        samplerParams.penaltyLastTokens = lib.llama_n_ctx(context);
+      print(
+        "%s: setting penalty_last_n to ctx_size = ${lib.llama_n_ctx(context)}\n",
+      );
+      samplerParams.penaltyLastTokens = lib.llama_n_ctx(context);
     }
 
     if (samplerParams.dryLookback == -1) {
-        print("%s: setting dryLookBack to ctx_size = ${lib.llama_n_ctx(context)}\n", );
-        samplerParams.dryLookback = lib.llama_n_ctx(context);
+      print(
+        "%s: setting dryLookBack to ctx_size = ${lib.llama_n_ctx(context)}\n",
+      );
+      samplerParams.dryLookback = lib.llama_n_ctx(context);
     }
 
     llama_sampler_chain_params sparams =
