@@ -24,11 +24,13 @@ class LlamaLoad extends LlamaCommand {
   final ModelParams modelParams;
   final ContextParams contextParams;
   final SamplerParams samplingParams;
+  final int? checkInterruptPointer;
   LlamaLoad({
     required this.path,
     required this.modelParams,
     required this.contextParams,
     required this.samplingParams,
+    this.checkInterruptPointer,
   });
 }
 
@@ -51,4 +53,6 @@ class LlamaChatError extends LlamaResponse {
 
 class LlamaChatDone extends LlamaResponse {}
 
-class LlamaReady extends LlamaResponse{}
+class LLamaInterrupted extends LlamaResponse {}
+
+class LlamaReady extends LlamaResponse {}

@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:ffi/ffi.dart';
 import 'sampler_params.dart';
@@ -40,6 +41,8 @@ class Llama {
   int _nPrompt = 0;
   int _nPredict = 32;
   int _nPast = 0;
+  Pointer<Uint8>? _interruptFlag;
+  final VoidCallback? onInterrupt;
 
   // bool _isInitialized = false;
   bool _isDisposed = false;
@@ -75,12 +78,22 @@ class Llama {
   /// Creates a new Llama instance with the specified model path and optional parameters.
   ///
   /// Throws [LlamaException] if model loading or initialization fails.
-  Llama(String modelPath,
-      [ModelParams? modelParamsDart,
-      ContextParams? contextParamsDart,
-      SamplerParams? samplerParams]) {
+  Llama(
+    String modelPath, {
+    ModelParams? modelParamsDart,
+    ContextParams? contextParamsDart,
+    SamplerParams? samplerParams,
+    int? checkInterruptPointerAddress,
+    this.onInterrupt,
+  }) {
     try {
       _validateConfiguration();
+
+      if (checkInterruptPointerAddress != null) {
+        _interruptFlag =
+            Pointer<Uint8>.fromAddress(checkInterruptPointerAddress);
+      }
+
       _initializeLlama(
           modelPath, modelParamsDart, contextParamsDart, samplerParams);
       _buffer = malloc<Char>(_bufSize);
@@ -93,6 +106,15 @@ class Llama {
       dispose();
       throw LlamaException('Failed to initialize Llama', e);
     }
+  }
+
+  bool isInterrupted() {
+    if (_interruptFlag == null) return false;
+    final bool interrupted = _interruptFlag!.value == 1;
+    if (interrupted) {
+      onInterrupt?.call();
+    }
+    return interrupted;
   }
 
   /// Fetches the chat template from the model

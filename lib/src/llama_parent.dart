@@ -53,6 +53,10 @@ class LlamaParent {
       case LlamaReady():
         updateState(LlamaGenerationState.ready);
         break;
+      case LLamaInterrupted():
+        _controller?.addError('Generation interrupted');
+        updateState(LlamaGenerationState.ready);
+        break;
     }
   }
 

@@ -2,7 +2,7 @@ import "package:llama_cpp_dart/src/chat_template.dart";
 import 'package:typed_isolate/typed_isolate.dart';
 
 import "llama.dart";
-import "isolate_types.dart";
+import "llama_types.dart";
 
 class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
   LlamaChild(int id) : super(id: id);
@@ -10,7 +10,6 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
   Llama? llama;
   LlmChatTemplate _template = LlmChatTemplate.chatml;
   String _systemPrompt = '';
-  bool _interrupt = false;
 
   @override
   void onData(LlamaCommand data) {
@@ -23,9 +22,19 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
             :final path,
             :final modelParams,
             :final contextParams,
-            :final samplingParams
+            :final samplingParams,
+            :final checkInterruptPointer
           ):
-          llama = Llama(path, modelParams, contextParams, samplingParams);
+          llama = Llama(
+            path,
+            modelParamsDart: modelParams,
+            contextParamsDart: contextParams,
+            samplerParams: samplingParams,
+            checkInterruptPointerAddress: checkInterruptPointer,
+            onInterrupt: () {
+              sendToParent(LLamaInterrupted());
+            },
+          );
           _template = llmChatDetectTemplate(llama?.fetchChatTemplate() ?? '');
           break;
         case LlamaChatMessage():
@@ -38,9 +47,6 @@ class LlamaChild extends IsolateChild<LlamaResponse, LlamaCommand> {
           llama?.dispose();
           llama = null;
           break;
-        case LLamaInterrupt():
-          print('interrupting');
-          _interrupt = true;
         default:
           break;
       }
