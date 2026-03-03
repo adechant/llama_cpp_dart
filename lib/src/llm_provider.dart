@@ -55,6 +55,8 @@ class LLMProvider extends ChangeNotifier {
     _controller?.close();
     _thinkController?.close();
     _child?.kill();
+    // Safely free memory after isolate is killed
+    calloc.free(_interruptFlag);
     super.dispose();
   }
 
@@ -72,99 +74,14 @@ class LLMProvider extends ChangeNotifier {
     _interruptFlag.value = 0;
   }
 
-  //************* CHILD ISOLATE******************* */
-
-  static void childIsolate(SendPort childSendPort) {
-    final childReceivePortSingle = ReceivePort();
-    final childReceivePort = childReceivePortSingle.asBroadcastStream();
-    childSendPort.send(childReceivePortSingle.sendPort);
-
-    Llama? llama;
-    LlmChatTemplate template = LlmChatTemplate.chatml;
-    String systemPrompt = '';
-
-    childReceivePort.listen((data) async {
-      if (data is LlamaCommand) {
-        try {
-          switch (data) {
-            case LlamaClear():
-              llama?.clear();
-              break;
-            case LlamaLoad(
-                :final path,
-                :final modelParams,
-                :final contextParams,
-                :final samplingParams,
-                :final checkInterruptPointer
-              ):
-              llama = Llama(path,
-                  modelParamsDart: modelParams,
-                  contextParamsDart: contextParams,
-                  samplerParams: samplingParams,
-                  checkInterruptPointerAddress: checkInterruptPointer,
-                  onInterrupt: () async {
-                childSendPort.send(LLamaInterrupted());
-                await childReceivePort.drain();
-              });
-              template =
-                  llmChatDetectTemplate(llama?.fetchChatTemplate() ?? '');
-              break;
-            case LlamaChatMessage():
-              String formattedPrompt =
-                  llmChatApplyTemplate(template, data, data.addAssistant);
-              if (formattedPrompt.isEmpty) {
-                break;
-              }
-
-              if (data.role == 'system') {
-                systemPrompt = formattedPrompt;
-                break;
-              } else if (data.role == 'user') {
-                formattedPrompt = '$systemPrompt$formattedPrompt';
-              }
-
-              Stream<String>? response = llama?.generate(
-                formattedPrompt,
-              );
-              response?.listen(
-                (text) {
-                  final response = LlamaChatMessage('assistant', text);
-                  childSendPort.send(response); // Send response to parent
-                },
-                onDone: () {
-                  childSendPort.send(LlamaChatDone());
-                },
-                onError: (e) {
-                  childSendPort
-                      .send(LlamaChatError(error: 'Error generating text $e'));
-                },
-              );
-              break;
-            case LlamaDispose():
-              llama?.dispose();
-              llama = null;
-            case LlamaKill():
-              childReceivePortSingle.close();
-              llama?.dispose();
-              llama = null;
-              Isolate.exit();
-            default:
-              break;
-          }
-        } catch (e) {
-          childSendPort.send(LlamaChatError(error: 'Error: $e'));
-        }
-      }
-    });
-  }
-
   //************************************ PARENT ************************************/
 
   Future<bool> load({required String path}) async {
     if (_child == null) {
       _modelPath = path;
       _parentReceivePort = ReceivePort();
-      _child = await Isolate.spawn(childIsolate, _parentReceivePort!.sendPort);
+      _child =
+          await Isolate.spawn(LlamaChild.process, _parentReceivePort!.sendPort);
 
       _parentReceivePort!.listen((data) async {
         if (data is SendPort) {
