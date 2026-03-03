@@ -4,8 +4,6 @@ sealed class LlamaCommand {}
 
 class LlamaClear extends LlamaCommand {}
 
-class LLamaInterrupt extends LlamaCommand {}
-
 class LlamaDispose extends LlamaCommand {}
 
 class LlamaKill extends LlamaCommand {}

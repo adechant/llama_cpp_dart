@@ -56,21 +56,19 @@ class Llama {
   /// Checks if the instance has been disposed
   bool get isDisposed => _isDisposed;
 
+  static final _libPaths = {
+    'android': 'libllama.so',
+    'linux': 'libllama.so',
+    'windows': 'llama.dll',
+    'macos': 'libllama.dylib',
+  };
+
   static llama_cpp get lib {
     if (_lib == null) {
-      if (libraryPath != null) {
-        _lib = llama_cpp(DynamicLibrary.open(libraryPath!));
-      } else if (Platform.isAndroid) {
-        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
-      } else if (Platform.isLinux) {
-        _lib = llama_cpp(DynamicLibrary.open("libllama.so"));
-      } else if (Platform.isWindows) {
-        _lib = llama_cpp(DynamicLibrary.open("./llama.dll"));
-      } else if (Platform.isMacOS) {
-        _lib = llama_cpp(DynamicLibrary.open("libllama.dylib"));
-      } else {
-        throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
-      }
+      final path =
+          libraryPath ?? _libPaths[Platform.operatingSystem.toLowerCase()];
+      if (path == null) throw UnsupportedError('Unsupported platform');
+      _lib = llama_cpp(DynamicLibrary.open(path));
     }
     return _lib!;
   }
@@ -313,9 +311,10 @@ class Llama {
     _tokenPtr = malloc<llama_token>();
   }
 
-  Stream<String> generate(String prompt,
-      {void Function(int current, int total)? onProgress,
-      Future<bool> Function()? checkInterrupt}) async* {
+  Stream<String> generate(
+    String prompt, {
+    void Function(int current, int total)? onProgress,
+  }) async* {
     if (prompt.isEmpty) {
       throw ArgumentError('Prompt cannot be empty');
     }
@@ -368,7 +367,7 @@ class Llama {
       batch = lib.llama_batch_get_one(_tokens, _nPrompt);
 
       while (true) {
-        if ((await checkInterrupt?.call()) ?? false) {
+        if (isInterrupted()) {
           break;
         }
 

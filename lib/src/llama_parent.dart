@@ -150,9 +150,7 @@ class LlamaParent {
     _stateController?.add(_state);
   }
 
-  void interrupt() async {
-    _parent.sendToChild(data: LLamaInterrupt(), id: _generationCount);
-  }
+  void interrupt() async {}
 
   Future<void> dispose() async {
     await _subscription?.cancel();
